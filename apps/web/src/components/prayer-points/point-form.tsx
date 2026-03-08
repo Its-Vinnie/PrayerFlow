@@ -66,14 +66,18 @@ export function PointForm({
     e.preventDefault();
     if (!title.trim()) return;
 
+    if (!body.trim()) return;
+
     setIsSubmitting(true);
     try {
       await onSubmit({
         title: title.trim(),
-        body: body.trim() || undefined,
+        body: body.trim(),
         sendMode,
       });
       onOpenChange(false);
+    } catch {
+      // Error handled by caller
     } finally {
       setIsSubmitting(false);
     }
@@ -110,7 +114,7 @@ export function PointForm({
 
           <div className="space-y-2">
             <Label htmlFor="point-body" className="text-xs font-medium text-muted-foreground">
-              Body / Details (optional)
+              Body / Details
             </Label>
             <Textarea
               id="point-body"
@@ -141,7 +145,7 @@ export function PointForm({
         <SheetFooter>
           <Button
             onClick={handleSubmit}
-            disabled={!title.trim() || isSubmitting}
+            disabled={!title.trim() || !body.trim() || isSubmitting}
             className="h-11 w-full bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
           >
             {isSubmitting ? (

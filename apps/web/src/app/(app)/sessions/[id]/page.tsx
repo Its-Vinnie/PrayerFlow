@@ -111,17 +111,27 @@ export default function SessionDetailPage() {
   };
 
   const handleAddPoint = async (data: { title: string; body?: string; sendMode: string }) => {
-    await api.createPoint(sessionId, data, initData);
-    toast.success('Point added');
-    fetchSession();
+    try {
+      await api.createPoint(sessionId, data, initData);
+      toast.success('Point added');
+      fetchSession();
+    } catch (err: any) {
+      toast.error('Failed to add point', { description: err.message });
+      throw err;
+    }
   };
 
   const handleEditPoint = async (data: { title: string; body?: string; sendMode: string }) => {
     if (!editingPoint) return;
-    await api.updatePoint(editingPoint.id, data, initData);
-    toast.success('Point updated');
-    setEditingPoint(null);
-    fetchSession();
+    try {
+      await api.updatePoint(editingPoint.id, data, initData);
+      toast.success('Point updated');
+      setEditingPoint(null);
+      fetchSession();
+    } catch (err: any) {
+      toast.error('Failed to update point', { description: err.message });
+      throw err;
+    }
   };
 
   const handleDeletePoint = async (pointId: string) => {
