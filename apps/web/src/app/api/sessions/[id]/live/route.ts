@@ -2,6 +2,30 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
 import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
 
+async function sendToTelegram(chatId: bigint, title: string, body: string): Promise<{ messageId?: number; error?: string }> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) return { error: 'Bot token not configured' };
+
+  const text = `🙏 *${title}*\n\n${body}`;
+
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId.toString(),
+      text,
+      parse_mode: 'Markdown',
+    }),
+  });
+
+  const data = await res.json();
+  if (!data.ok) {
+    return { error: data.description || 'Failed to send message' };
+  }
+
+  return { messageId: data.result.message_id };
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -43,6 +67,17 @@ export async function POST(
         return badRequest('No pending points to send');
       }
 
+      // Send to Telegram group
+      const sendResult = await sendToTelegram(session.group.telegramChatId, nextPoint.title, nextPoint.body);
+      if (sendResult.error) {
+        // Update point status to failed
+        await prisma.prayerPoint.update({
+          where: { id: nextPoint.id },
+          data: { status: 'failed' },
+        });
+        return badRequest(`Failed to send to Telegram: ${sendResult.error}`);
+      }
+
       // Update point status to sent
       const updatedPoint = await prisma.prayerPoint.update({
         where: { id: nextPoint.id },
@@ -56,6 +91,7 @@ export async function POST(
           sessionId: id,
           prayerPointId: nextPoint.id,
           groupId: session.groupId,
+          telegramMessageId: sendResult.messageId ? BigInt(sendResult.messageId) : null,
           sentByType: 'user',
           sentByUserId: auth.user.id,
           status: 'sent',
@@ -79,6 +115,16 @@ export async function POST(
         return badRequest('Point has already been sent');
       }
 
+      // Send to Telegram group
+      const sendNowResult = await sendToTelegram(session.group.telegramChatId, point.title, point.body);
+      if (sendNowResult.error) {
+        await prisma.prayerPoint.update({
+          where: { id: pointId },
+          data: { status: 'failed' },
+        });
+        return badRequest(`Failed to send to Telegram: ${sendNowResult.error}`);
+      }
+
       const updatedPoint = await prisma.prayerPoint.update({
         where: { id: pointId },
         data: { status: 'sent', sentAt: new Date() },
@@ -90,6 +136,7 @@ export async function POST(
           sessionId: id,
           prayerPointId: pointId,
           groupId: session.groupId,
+          telegramMessageId: sendNowResult.messageId ? BigInt(sendNowResult.messageId) : null,
           sentByType: 'user',
           sentByUserId: auth.user.id,
           status: 'sent',
