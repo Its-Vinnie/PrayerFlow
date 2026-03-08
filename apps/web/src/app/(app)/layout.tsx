@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useTelegram } from '@/hooks/use-telegram';
 import {
   BookOpen,
   Radio,
@@ -21,9 +23,42 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { initData, isReady } = useTelegram();
+  const [authDone, setAuthDone] = useState(false);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    async function authenticate() {
+      try {
+        await fetch('/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData }),
+        });
+      } catch {
+        // Auth failed silently - pages will show unauthorized state
+      } finally {
+        setAuthDone(true);
+      }
+    }
+
+    authenticate();
+  }, [isReady, initData]);
 
   // Hide bottom nav on live dashboard for distraction-free experience
   const isLivePage = pathname?.includes('/live');
+
+  if (!authDone) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Loading PrayerFlow...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
