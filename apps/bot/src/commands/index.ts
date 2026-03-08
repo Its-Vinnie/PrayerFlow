@@ -1,6 +1,80 @@
 import { Telegraf } from 'telegraf';
+import { prisma } from '@prayerflow/db';
 
 export function setupCommands(bot: Telegraf) {
+  // Handle bot being added to a group
+  bot.on('my_chat_member', async (ctx) => {
+    const chat = ctx.myChatMember.chat;
+    const newStatus = ctx.myChatMember.new_chat_member.status;
+    const from = ctx.myChatMember.from;
+
+    // Only handle group/supergroup/channel
+    if (chat.type !== 'group' && chat.type !== 'supergroup' && chat.type !== 'channel') return;
+
+    // Bot was added or promoted
+    if (newStatus === 'member' || newStatus === 'administrator') {
+      const telegramChatId = BigInt(chat.id);
+      const isAdmin = newStatus === 'administrator';
+
+      // Find the user who added the bot
+      const user = await prisma.user.findFirst({
+        where: { telegramUserId: BigInt(from.id), isActive: true },
+        include: { workspace: true },
+      });
+
+      if (!user) {
+        console.log(`Bot added to group by unknown user ${from.id} - skipping registration`);
+        return;
+      }
+
+      // Upsert the group
+      await prisma.telegramGroup.upsert({
+        where: {
+          workspaceId_telegramChatId: {
+            workspaceId: user.workspaceId,
+            telegramChatId,
+          },
+        },
+        update: {
+          title: chat.title || 'Untitled Group',
+          type: chat.type === 'channel' ? 'channel' : chat.type === 'supergroup' ? 'supergroup' : 'group',
+          botIsAdmin: isAdmin,
+          isActive: true,
+        },
+        create: {
+          workspaceId: user.workspaceId,
+          telegramChatId,
+          title: chat.title || 'Untitled Group',
+          type: chat.type === 'channel' ? 'channel' : chat.type === 'supergroup' ? 'supergroup' : 'group',
+          botIsAdmin: isAdmin,
+        },
+      });
+
+      console.log(`Registered group "${chat.title}" (${chat.id}) for workspace ${user.workspaceId}`);
+
+      try {
+        await ctx.telegram.sendMessage(
+          chat.id,
+          `PrayerFlow is now connected to this group! Prayer points will be sent here during live sessions.`,
+        );
+      } catch {
+        // May not have permission to send messages yet
+      }
+    }
+
+    // Bot was removed from group
+    if (newStatus === 'left' || newStatus === 'kicked') {
+      const telegramChatId = BigInt(chat.id);
+
+      await prisma.telegramGroup.updateMany({
+        where: { telegramChatId },
+        data: { isActive: false },
+      });
+
+      console.log(`Bot removed from group "${chat.title}" (${chat.id})`);
+    }
+  });
+
   bot.start((ctx) => {
     const firstName = ctx.from?.first_name || 'there';
     ctx.reply(
