@@ -57,5 +57,10 @@ export function badRequest(message: string) {
 }
 
 export function success<T>(data: T) {
-  return Response.json({ success: true, data });
+  return new Response(
+    JSON.stringify({ success: true, data }, (_key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    ),
+    { headers: { 'Content-Type': 'application/json' } },
+  );
 }
