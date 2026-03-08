@@ -1,11 +1,6 @@
 import 'dotenv/config';
 import { Worker } from 'bullmq';
-import IORedis from 'ioredis';
 import { QUEUE_NAMES } from '@prayerflow/shared';
-
-const connection = new IORedis(process.env.REDIS_URL!, {
-  maxRetriesPerRequest: null,
-});
 
 const worker = new Worker(
   QUEUE_NAMES.PRAYER_SEND,
@@ -13,7 +8,13 @@ const worker = new Worker(
     console.log(`Processing job ${job.id}:`, job.data);
     // TODO: Implement prayer point send logic
   },
-  { connection },
+  {
+    connection: {
+      host: new URL(process.env.REDIS_URL!).hostname,
+      port: Number(new URL(process.env.REDIS_URL!).port),
+      maxRetriesPerRequest: null,
+    },
+  },
 );
 
 worker.on('completed', (job) => console.log(`Job ${job.id} completed`));
