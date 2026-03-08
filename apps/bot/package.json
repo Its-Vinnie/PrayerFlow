@@ -1,0 +1,23 @@
+{
+  "name": "@prayerflow/bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "@prayerflow/db": "*",
+    "@prayerflow/shared": "*",
+    "dotenv": "^16.6.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "@types/node": "^22.15.0"
+  }
+}

@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  super_admin
+  admin
+  operator
+  viewer
+}
+
+enum SessionStatus {
+  draft
+  scheduled
+  live
+  paused
+  completed
+  cancelled
+}
+
+enum PointStatus {
+  pending
+  queued
+  sent
+  skipped
+  failed
+}
+
+enum SendMode {
+  manual
+  scheduled
+}
+
+enum JobStatus {
+  queued
+  running
+  completed
+  cancelled
+  failed
+}
+
+enum SentByType {
+  user
+  scheduler
+}
+
+enum GroupType {
+  group
+  supergroup
+  channel
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  telegramGroups TelegramGroup[]
+  sessions       PrayerSession[]
+  templates      Template[]
+  sentLogs       SentLog[]
+  scheduleJobs   ScheduleJob[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  telegramUserId BigInt
+  username       String?
+  displayName    String?
+  role           Role     @default(viewer)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace        Workspace       @relation(fields: [workspaceId], references: [id])
+  createdSessions  PrayerSession[] @relation("CreatedBy")
+  sentLogs         SentLog[]
+  createdTemplates Template[]      @relation("TemplateCreatedBy")
+
+  @@unique([workspaceId, telegramUserId])
+  @@index([telegramUserId])
+}
+
+model TelegramGroup {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  telegramChatId BigInt
+  title          String
+  type           GroupType @default(group)
+  botIsAdmin     Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id])
+  sessions  PrayerSession[]
+  sentLogs  SentLog[]
+
+  @@unique([workspaceId, telegramChatId])
+}
+
+model PrayerSession {
+  id               String        @id @default(cuid())
+  workspaceId      String
+  groupId          String
+  title            String
+  description      String?
+  status           SessionStatus @default(draft)
+  scheduledStartAt DateTime?
+  startedAt        DateTime?
+  endedAt          DateTime?
+  createdById      String
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id])
+  group        TelegramGroup @relation(fields: [groupId], references: [id])
+  createdBy    User          @relation("CreatedBy", fields: [createdById], references: [id])
+  prayerPoints PrayerPoint[]
+  sentLogs     SentLog[]
+  scheduleJobs ScheduleJob[]
+
+  @@index([workspaceId, status])
+  @@index([groupId, scheduledStartAt])
+}
+
+model PrayerPoint {
+  id          String      @id @default(cuid())
+  sessionId   String
+  title       String
+  body        String
+  orderIndex  Int
+  sendMode    SendMode    @default(manual)
+  scheduledAt DateTime?
+  status      PointStatus @default(pending)
+  sentAt      DateTime?
+  skippedAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  session     PrayerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scheduleJob ScheduleJob?
+  sentLogs    SentLog[]
+
+  @@index([sessionId, orderIndex])
+  @@index([sessionId, status])
+  @@index([scheduledAt, status])
+}
+
+model ScheduleJob {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  sessionId     String
+  prayerPointId String    @unique
+  queueJobId    String?
+  runAt         DateTime
+  status        JobStatus @default(queued)
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+  session     PrayerSession @relation(fields: [sessionId], references: [id])
+  prayerPoint PrayerPoint   @relation(fields: [prayerPointId], references: [id])
+
+  @@index([runAt, status])
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace    Workspace             @relation(fields: [workspaceId], references: [id])
+  createdBy    User                  @relation("TemplateCreatedBy", fields: [createdById], references: [id])
+  prayerPoints TemplatePrayerPoint[]
+}
+
+model TemplatePrayerPoint {
+  id         String   @id @default(cuid())
+  templateId String
+  title      String
+  body       String
+  orderIndex Int
+  tag        String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, orderIndex])
+}
+
+model SentLog {
+  id                String     @id @default(cuid())
+  workspaceId       String
+  sessionId         String
+  prayerPointId     String
+  groupId           String
+  telegramMessageId BigInt?
+  sentByType        SentByType
+  sentByUserId      String?
+  sentAt            DateTime   @default(now())
+  status            String
+  errorMessage      String?
+  metadata          Json?
+  createdAt         DateTime   @default(now())
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id])
+  session     PrayerSession @relation(fields: [sessionId], references: [id])
+  prayerPoint PrayerPoint   @relation(fields: [prayerPointId], references: [id])
+  group       TelegramGroup @relation(fields: [groupId], references: [id])
+  sentByUser  User?         @relation(fields: [sentByUserId], references: [id])
+
+  @@index([workspaceId, sentAt])
+  @@index([sessionId, sentAt])
+  @@index([prayerPointId, sentAt])
+}
