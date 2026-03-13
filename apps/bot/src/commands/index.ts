@@ -88,8 +88,7 @@ export function setupCommands(bot: Telegraf) {
 
       if (!user) {
         await ctx.answerInlineQuery([], {
-          switch_pm_text: 'Set up PrayerFlow first',
-          switch_pm_parameter: 'start',
+          button: { text: 'Set up PrayerFlow first', start_parameter: 'start' },
           cache_time: 5,
         });
         return;

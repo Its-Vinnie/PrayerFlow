@@ -2,10 +2,16 @@ import 'dotenv/config';
 import { Worker, Queue } from 'bullmq';
 import { prisma } from '@prayerflow/db';
 import { QUEUE_NAMES } from '@prayerflow/shared';
-import IORedis from 'ioredis';
 
 const redisUrl = process.env.REDIS_URL!;
-const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+const parsedUrl = new URL(redisUrl);
+const connection = {
+  host: parsedUrl.hostname,
+  port: parseInt(parsedUrl.port || '6379'),
+  password: parsedUrl.password || undefined,
+  username: parsedUrl.username || undefined,
+  maxRetriesPerRequest: null,
+};
 
 const botToken = process.env.TELEGRAM_BOT_TOKEN!;
 
@@ -29,12 +35,12 @@ async function sendToTelegram(chatId: string, title: string, body: string): Prom
     }),
   });
 
-  const data = await res.json();
+  const data = await res.json() as { ok: boolean; description?: string; result?: { message_id: number } };
   if (!data.ok) {
     return { error: data.description || 'Failed to send message' };
   }
 
-  return { messageId: data.result.message_id };
+  return { messageId: data.result?.message_id };
 }
 
 const worker = new Worker<PrayerSendJobData>(
@@ -306,12 +312,10 @@ console.log('PrayerFlow worker started, listening for jobs...');
 process.once('SIGINT', async () => {
   await worker.close();
   await sessionWorker.close();
-  await connection.quit();
   process.exit(0);
 });
 process.once('SIGTERM', async () => {
   await worker.close();
   await sessionWorker.close();
-  await connection.quit();
   process.exit(0);
 });
