@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTelegram } from '@/hooks/use-telegram';
 import { api } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
@@ -19,8 +19,7 @@ import {
   Users,
   Bot,
   User,
-  CheckCircle2,
-  XCircle,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,6 +29,9 @@ export default function LogsPage() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -42,7 +44,9 @@ export default function LogsPage() {
         api.getLogs(params, initData),
         api.getSessions(initData),
       ]);
-      setLogs(logsRes.data || []);
+      const logsData = logsRes.data;
+      setLogs(logsData?.logs || []);
+      setNextCursor(logsData?.nextCursor || null);
       setSessions(sessionsRes.data || []);
     } catch (err: any) {
       toast.error('Failed to load logs', { description: err.message });
@@ -51,9 +55,48 @@ export default function LogsPage() {
     }
   }, [initData, selectedSessionId]);
 
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+
+    setLoadingMore(true);
+    try {
+      const params: Record<string, string> = { cursor: nextCursor };
+      if (selectedSessionId && selectedSessionId !== 'all') {
+        params.sessionId = selectedSessionId;
+      }
+
+      const logsRes = await api.getLogs(params, initData);
+      const logsData = logsRes.data;
+      setLogs((prev) => [...prev, ...(logsData?.logs || [])]);
+      setNextCursor(logsData?.nextCursor || null);
+    } catch (err: any) {
+      toast.error('Failed to load more logs', { description: err.message });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore, selectedSessionId, initData]);
+
   useEffect(() => {
     if (isReady) fetchData();
   }, [isReady, fetchData]);
+
+  // Infinite scroll with IntersectionObserver
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && nextCursor && !loadingMore) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [nextCursor, loadingMore, loadMore]);
 
   const formatTime = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -63,6 +106,13 @@ export default function LogsPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const getSentByLabel = (log: any) => {
+    if (log.sentByType === 'scheduler') return 'auto';
+    if (log.sentByUser?.displayName) return log.sentByUser.displayName;
+    if (log.sentByUser?.username) return log.sentByUser.username;
+    return 'manual';
   };
 
   return (
@@ -135,21 +185,21 @@ export default function LogsPage() {
                     <div className="flex items-center gap-2">
                       <Send className="size-3 shrink-0 text-accent" />
                       <p className="truncate text-sm font-medium text-foreground">
-                        {log.pointTitle || log.prayerPoint?.title || 'Prayer Point'}
+                        {log.prayerPoint?.title || 'Prayer Point'}
                       </p>
                     </div>
 
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                      {log.sessionTitle && (
+                      {log.session?.title && (
                         <span className="text-[11px] text-muted-foreground">
-                          {log.sessionTitle}
+                          {log.session.title}
                         </span>
                       )}
 
-                      {(log.groupName || log.group?.name) && (
+                      {log.group?.title && (
                         <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                           <Users className="size-2.5" />
-                          {log.groupName || log.group?.name}
+                          {log.group.title}
                         </span>
                       )}
 
@@ -159,14 +209,21 @@ export default function LogsPage() {
                       </span>
 
                       <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        {log.sentBy === 'scheduler' || log.sentBy === 'auto' ? (
+                        {log.sentByType === 'scheduler' ? (
                           <Bot className="size-2.5" />
                         ) : (
                           <User className="size-2.5" />
                         )}
-                        {log.sentBy || 'manual'}
+                        {getSentByLabel(log)}
                       </span>
                     </div>
+
+                    {/* Error message for failed logs */}
+                    {log.status === 'failed' && log.errorMessage && (
+                      <p className="mt-1.5 text-[11px] text-red-400">
+                        {log.errorMessage}
+                      </p>
+                    )}
                   </div>
 
                   <div className="shrink-0">
@@ -183,6 +240,15 @@ export default function LogsPage() {
                 </div>
               </div>
             ))}
+
+            {/* Infinite scroll sentinel */}
+            <div ref={sentinelRef} className="h-1" />
+
+            {loadingMore && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
           </div>
         )}
       </div>

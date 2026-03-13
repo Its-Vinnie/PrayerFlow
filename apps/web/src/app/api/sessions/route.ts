@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, badRequest, forbidden } from '@/lib/auth';
+import { LIMITS } from '@prayerflow/shared';
+import { authenticateRequest, unauthorized, success, badRequest, forbidden, withErrorHandler } from '@/lib/auth';
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -27,9 +28,9 @@ export async function GET(req: NextRequest) {
   });
 
   return success(sessions);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler(async (req: NextRequest) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -40,6 +41,13 @@ export async function POST(req: NextRequest) {
 
   if (!title || !groupId) {
     return badRequest('title and groupId are required');
+  }
+
+  if (title.length > LIMITS.TITLE_MAX_LENGTH) {
+    return badRequest(`Title must be ${LIMITS.TITLE_MAX_LENGTH} characters or less`);
+  }
+  if (description && description.length > LIMITS.DESCRIPTION_MAX_LENGTH) {
+    return badRequest(`Description must be ${LIMITS.DESCRIPTION_MAX_LENGTH} characters or less`);
   }
 
   // Verify group belongs to workspace
@@ -67,4 +75,4 @@ export async function POST(req: NextRequest) {
   });
 
   return success(session);
-}
+});

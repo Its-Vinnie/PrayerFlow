@@ -312,10 +312,12 @@ console.log('PrayerFlow worker started, listening for jobs...');
 process.once('SIGINT', async () => {
   await worker.close();
   await sessionWorker.close();
+  await prisma.$disconnect();
   process.exit(0);
 });
 process.once('SIGTERM', async () => {
   await worker.close();
   await sessionWorker.close();
+  await prisma.$disconnect();
   process.exit(0);
 });

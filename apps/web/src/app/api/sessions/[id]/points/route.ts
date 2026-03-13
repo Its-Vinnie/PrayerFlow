@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { LIMITS } from '@prayerflow/shared';
+import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden, withErrorHandler } from '@/lib/auth';
 
-export async function POST(
+export const POST = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -28,9 +29,19 @@ export async function POST(
       return badRequest('points array cannot be empty');
     }
 
+    if (points.length > LIMITS.BULK_POINTS_MAX) {
+      return badRequest(`Cannot create more than ${LIMITS.BULK_POINTS_MAX} points at once`);
+    }
+
     for (const p of points) {
       if (!p.title || !p.body) {
         return badRequest('Each point must have a title and body');
+      }
+      if (p.title.length > LIMITS.TITLE_MAX_LENGTH) {
+        return badRequest(`Point title must be ${LIMITS.TITLE_MAX_LENGTH} characters or less`);
+      }
+      if (p.body.length > LIMITS.BODY_MAX_LENGTH) {
+        return badRequest(`Point body must be ${LIMITS.BODY_MAX_LENGTH} characters or less`);
       }
     }
 
@@ -60,6 +71,13 @@ export async function POST(
     return badRequest('title and body are required');
   }
 
+  if (title.length > LIMITS.TITLE_MAX_LENGTH) {
+    return badRequest(`Title must be ${LIMITS.TITLE_MAX_LENGTH} characters or less`);
+  }
+  if (pointBody.length > LIMITS.BODY_MAX_LENGTH) {
+    return badRequest(`Body must be ${LIMITS.BODY_MAX_LENGTH} characters or less`);
+  }
+
   // Auto-calculate orderIndex
   const maxOrder = await prisma.prayerPoint.aggregate({
     where: { sessionId: id },
@@ -79,4 +97,4 @@ export async function POST(
   });
 
   return success(point);
-}
+});

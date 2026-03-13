@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { LIMITS } from '@prayerflow/shared';
+import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden, withErrorHandler } from '@/lib/auth';
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -16,9 +17,9 @@ export async function GET(req: NextRequest) {
   });
 
   return success(templates);
-}
+});
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler(async (req: NextRequest) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -29,6 +30,13 @@ export async function POST(req: NextRequest) {
 
   if (!name) {
     return badRequest('name is required');
+  }
+
+  if (name.length > LIMITS.TEMPLATE_NAME_MAX_LENGTH) {
+    return badRequest(`Name must be ${LIMITS.TEMPLATE_NAME_MAX_LENGTH} characters or less`);
+  }
+  if (description && description.length > LIMITS.DESCRIPTION_MAX_LENGTH) {
+    return badRequest(`Description must be ${LIMITS.DESCRIPTION_MAX_LENGTH} characters or less`);
   }
 
   // If creating from a session, copy its points
@@ -77,4 +85,4 @@ export async function POST(req: NextRequest) {
   });
 
   return success(template);
-}
+});

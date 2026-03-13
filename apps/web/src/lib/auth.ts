@@ -64,3 +64,23 @@ export function success<T>(data: T) {
     { headers: { 'Content-Type': 'application/json' } },
   );
 }
+
+export function serverError(message = 'Internal server error') {
+  return Response.json({ success: false, error: message }, { status: 500 });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function withErrorHandler<T extends (...args: any[]) => Promise<Response>>(handler: T): T {
+  return (async (...args: any[]) => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      const req = args[0] as NextRequest;
+      console.error(`[API Error] ${req.method} ${req.nextUrl.pathname}:`, error);
+      if (error instanceof SyntaxError) {
+        return badRequest('Invalid JSON body');
+      }
+      return serverError();
+    }
+  }) as T;
+}

@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { LIMITS } from '@prayerflow/shared';
+import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden, withErrorHandler } from '@/lib/auth';
 
-export async function GET(
+export const GET = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -23,12 +24,12 @@ export async function GET(
   if (!session) return notFound('Session');
 
   return success(session);
-}
+});
 
-export async function PATCH(
+export const PATCH = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -43,6 +44,13 @@ export async function PATCH(
 
   const body = await req.json();
   const { title, description, groupId, scheduledStartAt } = body;
+
+  if (title !== undefined && title.length > LIMITS.TITLE_MAX_LENGTH) {
+    return badRequest(`Title must be ${LIMITS.TITLE_MAX_LENGTH} characters or less`);
+  }
+  if (description !== undefined && description && description.length > LIMITS.DESCRIPTION_MAX_LENGTH) {
+    return badRequest(`Description must be ${LIMITS.DESCRIPTION_MAX_LENGTH} characters or less`);
+  }
 
   const updateData: Record<string, unknown> = {};
   if (title !== undefined) updateData.title = title;
@@ -70,12 +78,12 @@ export async function PATCH(
   });
 
   return success(updated);
-}
+});
 
-export async function DELETE(
+export const DELETE = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -95,4 +103,4 @@ export async function DELETE(
   await prisma.prayerSession.delete({ where: { id } });
 
   return success({ deleted: true });
-}
+});

@@ -1,15 +1,16 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success } from '@/lib/auth';
+import { LIMITS } from '@prayerflow/shared';
+import { authenticateRequest, unauthorized, success, withErrorHandler } from '@/lib/auth';
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get('sessionId');
   const groupId = searchParams.get('groupId');
-  const limit = parseInt(searchParams.get('limit') || '50', 10);
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), LIMITS.LOGS_MAX_LIMIT);
   const cursor = searchParams.get('cursor');
 
   const where: Record<string, unknown> = {
@@ -39,4 +40,4 @@ export async function GET(req: NextRequest) {
   const nextCursor = logs.length === limit ? logs[logs.length - 1].id : null;
 
   return success({ logs, nextCursor });
-}
+});

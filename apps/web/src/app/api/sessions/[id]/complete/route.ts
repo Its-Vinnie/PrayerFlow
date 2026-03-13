@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden, withErrorHandler } from '@/lib/auth';
 import { getSessionQueue } from '@/lib/queue';
 
-export async function POST(
+export const POST = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -49,4 +49,4 @@ export async function POST(
   }
 
   return success(updated);
-}
+});

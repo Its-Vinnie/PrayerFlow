@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { LIMITS } from '@prayerflow/shared';
+import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden, withErrorHandler } from '@/lib/auth';
 
-export async function PATCH(
+export const PATCH = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -26,6 +27,13 @@ export async function PATCH(
   const body = await req.json();
   const { title, body: pointBody, sendMode, scheduledAt } = body;
 
+  if (title !== undefined && title.length > LIMITS.TITLE_MAX_LENGTH) {
+    return badRequest(`Title must be ${LIMITS.TITLE_MAX_LENGTH} characters or less`);
+  }
+  if (pointBody !== undefined && pointBody.length > LIMITS.BODY_MAX_LENGTH) {
+    return badRequest(`Body must be ${LIMITS.BODY_MAX_LENGTH} characters or less`);
+  }
+
   const updateData: Record<string, unknown> = {};
   if (title !== undefined) updateData.title = title;
   if (pointBody !== undefined) updateData.body = pointBody;
@@ -44,12 +52,12 @@ export async function PATCH(
   });
 
   return success(updated);
-}
+});
 
-export async function DELETE(
+export const DELETE = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -70,4 +78,4 @@ export async function DELETE(
   await prisma.prayerPoint.delete({ where: { id } });
 
   return success({ deleted: true });
-}
+});

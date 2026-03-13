@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
 import { validateTelegramInitData, parseTelegramInitData } from '@/lib/telegram';
-import { success, badRequest, unauthorized } from '@/lib/auth';
+import { success, badRequest, unauthorized, withErrorHandler } from '@/lib/auth';
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandler(async (req: NextRequest) => {
   const body = await req.json();
   const { initData } = body;
 
@@ -79,4 +79,4 @@ export async function POST(req: NextRequest) {
       slug: user.workspace.slug,
     },
   });
-}
+});

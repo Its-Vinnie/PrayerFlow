@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden, withErrorHandler } from '@/lib/auth';
 
 async function sendToTelegram(chatId: bigint, title: string, body: string): Promise<{ messageId?: number; error?: string }> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -18,18 +18,18 @@ async function sendToTelegram(chatId: bigint, title: string, body: string): Prom
     }),
   });
 
-  const data = await res.json();
+  const data = await res.json() as { ok: boolean; description?: string; result?: { message_id: number } };
   if (!data.ok) {
     return { error: data.description || 'Failed to send message' };
   }
 
-  return { messageId: data.result.message_id };
+  return { messageId: data.result?.message_id };
 }
 
-export async function POST(
+export const POST = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -193,7 +193,7 @@ export async function POST(
         // Split by points, keeping under limit
         let current = `*${session.title}*\n\n`;
         for (const p of allPending) {
-          const pointText = `${messages.length === 0 ? '' : ''}${allPending.indexOf(p) + 1}. ${p.body}\n\n`;
+          const pointText = `${allPending.indexOf(p) + 1}. ${p.body}\n\n`;
           if (current.length + pointText.length > 4000) {
             messages.push(current.trim());
             current = '';
@@ -218,11 +218,11 @@ export async function POST(
             parse_mode: 'Markdown',
           }),
         });
-        const data = await res.json();
+        const data = await res.json() as { ok: boolean; description?: string; result?: { message_id: number } };
         if (!data.ok) {
           return badRequest(`Failed to send to Telegram: ${data.description}`);
         }
-        lastMessageId = data.result.message_id;
+        lastMessageId = data.result?.message_id;
       }
 
       // Mark all as sent
@@ -252,4 +252,4 @@ export async function POST(
     default:
       return badRequest(`Unknown action: ${action}. Valid actions: send-next, send-now, send-all, skip`);
   }
-}
+});

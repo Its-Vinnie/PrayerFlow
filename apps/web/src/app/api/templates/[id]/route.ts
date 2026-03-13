@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
-import { authenticateRequest, unauthorized, success, notFound, forbidden, badRequest } from '@/lib/auth';
+import { LIMITS } from '@prayerflow/shared';
+import { authenticateRequest, unauthorized, success, notFound, forbidden, badRequest, withErrorHandler } from '@/lib/auth';
 
-export async function GET(
+export const GET = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -22,12 +23,12 @@ export async function GET(
   if (!template) return notFound('Template');
 
   return success(template);
-}
+});
 
-export async function PATCH(
+export const PATCH = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -43,6 +44,13 @@ export async function PATCH(
   const body = await req.json();
   const { name, description } = body;
 
+  if (name !== undefined && name.length > LIMITS.TEMPLATE_NAME_MAX_LENGTH) {
+    return badRequest(`Name must be ${LIMITS.TEMPLATE_NAME_MAX_LENGTH} characters or less`);
+  }
+  if (description !== undefined && description && description.length > LIMITS.DESCRIPTION_MAX_LENGTH) {
+    return badRequest(`Description must be ${LIMITS.DESCRIPTION_MAX_LENGTH} characters or less`);
+  }
+
   const updated = await prisma.template.update({
     where: { id },
     data: {
@@ -56,12 +64,12 @@ export async function PATCH(
   });
 
   return success(updated);
-}
+});
 
-export async function DELETE(
+export const DELETE = withErrorHandler(async (
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   const auth = await authenticateRequest(req);
   if (!auth) return unauthorized();
 
@@ -79,4 +87,4 @@ export async function DELETE(
   await prisma.template.delete({ where: { id } });
 
   return success({ deleted: true });
-}
+});
