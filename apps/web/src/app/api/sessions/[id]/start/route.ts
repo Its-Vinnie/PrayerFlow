@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
 import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { getSessionQueue } from '@/lib/queue';
 
 export async function POST(
   req: NextRequest,
@@ -15,6 +16,7 @@ export async function POST(
 
   const session = await prisma.prayerSession.findFirst({
     where: { id, workspaceId: auth.workspace.id },
+    include: { prayerPoints: true },
   });
   if (!session) return notFound('Session');
 
@@ -33,6 +35,26 @@ export async function POST(
       prayerPoints: { orderBy: { orderIndex: 'asc' } },
     },
   });
+
+  // Emit session-started event for the worker to queue scheduled points
+  const hasScheduledPoints = session.prayerPoints.some(
+    (p) => p.sendMode === 'scheduled' && p.scheduledAt
+  );
+
+  if (hasScheduledPoints) {
+    try {
+      const queue = getSessionQueue();
+      await queue.add('session-started', {
+        event: 'session-started',
+        sessionId: id,
+        workspaceId: auth.workspace.id,
+      });
+      await queue.close();
+    } catch (err) {
+      console.error('Failed to emit session-started event:', err);
+      // Don't fail the start — manual sending still works
+    }
+  }
 
   return success(updated);
 }

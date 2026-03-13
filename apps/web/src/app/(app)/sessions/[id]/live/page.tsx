@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Radio,
+  Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -89,6 +90,19 @@ export default function LiveDashboardPage() {
       await fetchSession();
     } catch (err: any) {
       toast.error('Failed to skip', { description: err.message });
+    }
+  };
+
+  const handleSendAll = async () => {
+    setSending(true);
+    try {
+      const res = await api.sendAll(sessionId, initData);
+      toast.success(`${res.data.sentCount} prayer points sent`);
+      await fetchSession();
+    } catch (err: any) {
+      toast.error('Failed to send all', { description: err.message });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -269,19 +283,33 @@ export default function LiveDashboardPage() {
 
       {/* SEND NEXT Button - THE HERO */}
       {!isCompleted && (
-        <div className="px-4 py-3">
-          <SendButton
-            onClick={handleSendNext}
-            loading={sending}
-            disabled={pendingPoints.length === 0 || isPaused}
-            label={
-              pendingPoints.length === 0
-                ? 'All Sent'
-                : isPaused
-                  ? 'Session Paused'
-                  : 'Send Next'
-            }
-          />
+        <div className="px-4 py-3 space-y-2">
+          <div className="flex gap-2">
+            <SendButton
+              onClick={handleSendNext}
+              loading={sending}
+              disabled={pendingPoints.length === 0 || isPaused}
+              label={
+                pendingPoints.length === 0
+                  ? 'All Sent'
+                  : isPaused
+                    ? 'Session Paused'
+                    : 'Send Next'
+              }
+            />
+          </div>
+
+          {pendingPoints.length > 1 && !isPaused && (
+            <Button
+              variant="outline"
+              onClick={handleSendAll}
+              disabled={sending}
+              className="h-12 w-full border-accent/30 text-accent hover:bg-accent/10 font-semibold"
+            >
+              <Send className="mr-1.5 size-4" />
+              Send All ({pendingPoints.length} points)
+            </Button>
+          )}
 
           {isPaused && (
             <p className="mt-2 text-center text-xs text-amber-400">

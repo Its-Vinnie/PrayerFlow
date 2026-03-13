@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@prayerflow/db';
 import { authenticateRequest, unauthorized, success, badRequest, notFound, forbidden } from '@/lib/auth';
+import { getSessionQueue } from '@/lib/queue';
 
 export async function POST(
   req: NextRequest,
@@ -33,6 +34,19 @@ export async function POST(
       prayerPoints: { orderBy: { orderIndex: 'asc' } },
     },
   });
+
+  // Cancel any remaining scheduled jobs
+  try {
+    const queue = getSessionQueue();
+    await queue.add('session-completed', {
+      event: 'session-completed',
+      sessionId: id,
+      workspaceId: auth.workspace.id,
+    });
+    await queue.close();
+  } catch (err) {
+    console.error('Failed to emit session-completed event:', err);
+  }
 
   return success(updated);
 }

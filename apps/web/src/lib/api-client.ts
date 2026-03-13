@@ -126,14 +126,28 @@ export const api = {
   sendNow: (sessionId: string, prayerPointId: string, initData?: string) =>
     apiFetch<{ success: boolean; data: any }>(`/api/sessions/${sessionId}/live`, {
       method: 'POST',
-      body: JSON.stringify({ action: 'send-now', prayerPointId }),
+      body: JSON.stringify({ action: 'send-now', pointId: prayerPointId }),
       initData,
     }),
 
   skipPoint: (sessionId: string, prayerPointId: string, initData?: string) =>
     apiFetch<{ success: boolean; data: any }>(`/api/sessions/${sessionId}/live`, {
       method: 'POST',
-      body: JSON.stringify({ action: 'skip', prayerPointId }),
+      body: JSON.stringify({ action: 'skip', pointId: prayerPointId }),
+      initData,
+    }),
+
+  sendAll: (sessionId: string, initData?: string) =>
+    apiFetch<{ success: boolean; data: any }>(`/api/sessions/${sessionId}/live`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'send-all' }),
+      initData,
+    }),
+
+  bulkCreatePoints: (sessionId: string, points: Array<{ title: string; body: string }>, initData?: string) =>
+    apiFetch<{ success: boolean; data: any }>(`/api/sessions/${sessionId}/points`, {
+      method: 'POST',
+      body: JSON.stringify({ points }),
       initData,
     }),
 
@@ -145,6 +159,19 @@ export const api = {
   getTemplates: (initData?: string) =>
     apiFetch<{ success: boolean; data: any[] }>('/api/templates', { initData }),
 
+  createTemplate: (data: { name: string; description?: string; sessionId?: string }, initData?: string) =>
+    apiFetch<{ success: boolean; data: any }>('/api/templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      initData,
+    }),
+
+  deleteTemplate: (id: string, initData?: string) =>
+    apiFetch<{ success: boolean }>(`/api/templates/${id}`, {
+      method: 'DELETE',
+      initData,
+    }),
+
   createFromTemplate: (templateId: string, data: any, initData?: string) =>
     apiFetch<{ success: boolean; data: any }>(`/api/templates/${templateId}/use`, {
       method: 'POST',
@@ -155,6 +182,6 @@ export const api = {
   // Logs
   getLogs: (params?: Record<string, string>, initData?: string) => {
     const searchParams = new URLSearchParams(params);
-    return apiFetch<{ success: boolean; data: any[] }>(`/api/logs?${searchParams}`, { initData });
+    return apiFetch<{ success: boolean; data: any }>(`/api/logs?${searchParams}`, { initData });
   },
 };

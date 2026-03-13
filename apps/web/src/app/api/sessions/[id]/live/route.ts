@@ -168,7 +168,88 @@ export async function POST(
       return success(updatedPoint);
     }
 
+    case 'send-all': {
+      const allPending = await prisma.prayerPoint.findMany({
+        where: { sessionId: id, status: 'pending' },
+        orderBy: { orderIndex: 'asc' },
+      });
+
+      if (allPending.length === 0) {
+        return badRequest('No pending points to send');
+      }
+
+      // Format all points into one message
+      const combinedText = allPending
+        .map((p, i) => `${i + 1}. ${p.body}`)
+        .join('\n\n');
+
+      const fullMessage = `*${session.title}*\n\n${combinedText}`;
+
+      // Telegram has 4096 char limit — split into multiple messages if needed
+      const messages: string[] = [];
+      if (fullMessage.length <= 4096) {
+        messages.push(fullMessage);
+      } else {
+        // Split by points, keeping under limit
+        let current = `*${session.title}*\n\n`;
+        for (const p of allPending) {
+          const pointText = `${messages.length === 0 ? '' : ''}${allPending.indexOf(p) + 1}. ${p.body}\n\n`;
+          if (current.length + pointText.length > 4000) {
+            messages.push(current.trim());
+            current = '';
+          }
+          current += pointText;
+        }
+        if (current.trim()) messages.push(current.trim());
+      }
+
+      // Send all message chunks
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (!botToken) return badRequest('Bot token not configured');
+
+      let lastMessageId: number | undefined;
+      for (const msg of messages) {
+        const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: session.group.telegramChatId.toString(),
+            text: msg,
+            parse_mode: 'Markdown',
+          }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          return badRequest(`Failed to send to Telegram: ${data.description}`);
+        }
+        lastMessageId = data.result.message_id;
+      }
+
+      // Mark all as sent
+      const now = new Date();
+      await prisma.prayerPoint.updateMany({
+        where: { sessionId: id, status: 'pending' },
+        data: { status: 'sent', sentAt: now },
+      });
+
+      // Create sent logs
+      await prisma.sentLog.createMany({
+        data: allPending.map((p) => ({
+          workspaceId: auth.workspace.id,
+          sessionId: id,
+          prayerPointId: p.id,
+          groupId: session.groupId,
+          telegramMessageId: lastMessageId ? BigInt(lastMessageId) : null,
+          sentByType: 'user' as const,
+          sentByUserId: auth.user.id,
+          status: 'sent',
+        })),
+      });
+
+      return success({ sentCount: allPending.length });
+    }
+
     default:
-      return badRequest(`Unknown action: ${action}. Valid actions: send-next, send-now, skip`);
+      return badRequest(`Unknown action: ${action}. Valid actions: send-next, send-now, send-all, skip`);
   }
 }

@@ -38,6 +38,7 @@ import {
   Copy,
   Loader2,
   ChevronRight,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -74,9 +75,20 @@ export default function TemplatesPage() {
     if (isReady) fetchData();
   }, [isReady, fetchData]);
 
+  const handleDeleteTemplate = async (e: React.MouseEvent, templateId: string) => {
+    e.stopPropagation();
+    try {
+      await api.deleteTemplate(templateId, initData);
+      toast.success('Template deleted');
+      setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+    } catch (err: any) {
+      toast.error('Failed to delete', { description: err.message });
+    }
+  };
+
   const openUseSheet = (template: any) => {
     setSelectedTemplate(template);
-    setSessionTitle(template.title || '');
+    setSessionTitle(template.name || template.title || '');
     setSelectedGroupId('');
     setUseSheetOpen(true);
   };
@@ -150,7 +162,7 @@ export default function TemplatesPage() {
               >
                 <CardHeader>
                   <CardTitle className="text-primary">
-                    {template.title}
+                    {template.name || template.title}
                   </CardTitle>
                   <CardAction>
                     <ChevronRight className="size-4 text-muted-foreground" />
@@ -162,15 +174,23 @@ export default function TemplatesPage() {
                   )}
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center gap-3">
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <ListChecks className="size-3" />
-                      {template.pointCount || template.points?.length || 0}{' '}
-                      points
-                    </span>
-                    <Badge className="rounded-full border border-accent/20 bg-accent/10 px-2 py-0 text-[10px] font-semibold text-accent">
-                      Template
-                    </Badge>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <ListChecks className="size-3" />
+                        {template.pointCount || template._count?.prayerPoints || template.points?.length || 0}{' '}
+                        points
+                      </span>
+                      <Badge className="rounded-full border border-accent/20 bg-accent/10 px-2 py-0 text-[10px] font-semibold text-accent">
+                        Template
+                      </Badge>
+                    </div>
+                    <button
+                      onClick={(e) => handleDeleteTemplate(e, template.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </CardContent>
               </Card>
@@ -185,7 +205,7 @@ export default function TemplatesPage() {
           <SheetHeader>
             <SheetTitle>Use Template</SheetTitle>
             <SheetDescription>
-              Create a new session from &quot;{selectedTemplate?.title}&quot;
+              Create a new session from &quot;{selectedTemplate?.name || selectedTemplate?.title}&quot;
             </SheetDescription>
           </SheetHeader>
 

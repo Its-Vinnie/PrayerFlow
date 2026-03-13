@@ -11,6 +11,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PointCard } from '@/components/prayer-points/point-card';
 import { PointForm } from '@/components/prayer-points/point-form';
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from '@/components/ui/sheet';
+import { Textarea } from '@/components/ui/textarea';
+import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -31,6 +40,9 @@ import {
   Users,
   ListChecks,
   Trash2,
+  ClipboardPaste,
+  Loader2,
+  LayoutTemplate,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -53,6 +65,10 @@ export default function SessionDetailPage() {
   const [pointFormOpen, setPointFormOpen] = useState(false);
   const [editingPoint, setEditingPoint] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [bulkFormOpen, setBulkFormOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [saveTemplateLoading, setSaveTemplateLoading] = useState(false);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -144,6 +160,63 @@ export default function SessionDetailPage() {
     }
   };
 
+  const handleSaveAsTemplate = async () => {
+    if (!session) return;
+    setSaveTemplateLoading(true);
+    try {
+      await api.createTemplate(
+        { name: session.title, description: session.description, sessionId },
+        initData,
+      );
+      toast.success('Saved as template');
+    } catch (err: any) {
+      toast.error('Failed to save template', { description: err.message });
+    } finally {
+      setSaveTemplateLoading(false);
+    }
+  };
+
+  function parseBulkPrayerPoints(text: string): Array<{ title: string; body: string }> {
+    // Split by lines that start with a number (handles "7 Father..." or "7. Father..." patterns)
+    const blocks = text.split(/\n(?=\d+[\.\)\s])/).map(b => b.trim()).filter(Boolean);
+
+    if (blocks.length <= 1 && !text.match(/^\d+[\.\)\s]/)) {
+      // No numbered pattern found — split by blank lines instead
+      return text.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean).map((block, i) => ({
+        title: `Prayer Point ${i + 1}`,
+        body: block,
+      }));
+    }
+
+    return blocks.map((block, i) => {
+      const numberMatch = block.match(/^(\d+)/);
+      const num = numberMatch ? numberMatch[1] : String(i + 1);
+      const cleaned = block.replace(/^\d+[\.\)\s]+/, '').trim();
+      return {
+        title: `Prayer Point ${num}`,
+        body: cleaned,
+      };
+    });
+  }
+
+  const parsedBulkPoints = bulkText.trim() ? parseBulkPrayerPoints(bulkText) : [];
+
+  const handleBulkAdd = async () => {
+    if (parsedBulkPoints.length === 0) return;
+    setBulkSubmitting(true);
+    try {
+      await api.bulkCreatePoints(sessionId, parsedBulkPoints, initData);
+      toast.success(`${parsedBulkPoints.length} prayer points added`);
+      setBulkText('');
+      setBulkFormOpen(false);
+      fetchSession();
+    } catch (err: any) {
+      toast.error('Failed to add points', { description: err.message });
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-dvh px-5 py-4">
@@ -204,6 +277,10 @@ export default function SessionDetailPage() {
               <DropdownMenuItem onClick={() => handleAction('duplicate')}>
                 <Copy className="mr-2 size-3.5" />
                 Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSaveAsTemplate} disabled={saveTemplateLoading || points.length === 0}>
+                <LayoutTemplate className="mr-2 size-3.5" />
+                {saveTemplateLoading ? 'Saving...' : 'Save as Template'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -335,18 +412,29 @@ export default function SessionDetailPage() {
             Prayer Points
           </h2>
           {session.status !== 'completed' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setEditingPoint(null);
-                setPointFormOpen(true);
-              }}
-              className="text-accent hover:text-accent hover:bg-accent/10"
-            >
-              <Plus className="mr-1 size-3.5" />
-              Add
-            </Button>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBulkFormOpen(true)}
+                className="text-accent hover:text-accent hover:bg-accent/10"
+              >
+                <ClipboardPaste className="mr-1 size-3.5" />
+                Bulk Add
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditingPoint(null);
+                  setPointFormOpen(true);
+                }}
+                className="text-accent hover:text-accent hover:bg-accent/10"
+              >
+                <Plus className="mr-1 size-3.5" />
+                Add
+              </Button>
+            </div>
           )}
         </div>
 
@@ -406,6 +494,56 @@ export default function SessionDetailPage() {
         initialData={editingPoint}
         mode={editingPoint ? 'edit' : 'create'}
       />
+
+      {/* Bulk Paste Sheet */}
+      <Sheet open={bulkFormOpen} onOpenChange={setBulkFormOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85dvh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Bulk Add Prayer Points</SheetTitle>
+            <SheetDescription>
+              Paste your numbered prayer points below. Each point should start with a number.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex flex-col gap-4 px-4">
+            <Textarea
+              placeholder={`Example:\n\n1 Father, I thank You for victory...\n\n2 Father, I praise You for open heavens...\n\n3 Father, I thank You for divine speed...`}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              rows={10}
+              className="bg-secondary/50 border-border/50 focus:border-accent resize-none text-sm"
+            />
+
+            {parsedBulkPoints.length > 0 && (
+              <div className="rounded-lg border border-accent/20 bg-accent/5 px-3 py-2">
+                <p className="text-xs font-semibold text-accent">
+                  {parsedBulkPoints.length} prayer point{parsedBulkPoints.length !== 1 ? 's' : ''} detected
+                </p>
+              </div>
+            )}
+          </div>
+
+          <SheetFooter>
+            <Button
+              onClick={handleBulkAdd}
+              disabled={parsedBulkPoints.length === 0 || bulkSubmitting}
+              className="h-11 w-full bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
+            >
+              {bulkSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <ClipboardPaste className="mr-2 size-4" />
+                  Add {parsedBulkPoints.length} Points
+                </>
+              )}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

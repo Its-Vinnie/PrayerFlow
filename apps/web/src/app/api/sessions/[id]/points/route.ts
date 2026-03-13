@@ -19,6 +19,41 @@ export async function POST(
   if (!session) return notFound('Session');
 
   const body = await req.json();
+
+  // Bulk create: { points: [{ title, body }, ...] }
+  if (Array.isArray(body.points)) {
+    const points = body.points as Array<{ title: string; body: string; sendMode?: string }>;
+
+    if (points.length === 0) {
+      return badRequest('points array cannot be empty');
+    }
+
+    for (const p of points) {
+      if (!p.title || !p.body) {
+        return badRequest('Each point must have a title and body');
+      }
+    }
+
+    const maxOrder = await prisma.prayerPoint.aggregate({
+      where: { sessionId: id },
+      _max: { orderIndex: true },
+    });
+    let nextIndex = (maxOrder._max.orderIndex ?? -1) + 1;
+
+    await prisma.prayerPoint.createMany({
+      data: points.map((p) => ({
+        sessionId: id,
+        title: p.title,
+        body: p.body,
+        orderIndex: nextIndex++,
+        sendMode: (p.sendMode as any) || 'manual',
+      })),
+    });
+
+    return success({ count: points.length });
+  }
+
+  // Single create
   const { title, body: pointBody, sendMode, scheduledAt } = body;
 
   if (!title || !pointBody) {
